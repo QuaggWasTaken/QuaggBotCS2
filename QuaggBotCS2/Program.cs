@@ -6,6 +6,7 @@ using Microsoft.EntityFrameworkCore;
 using Newtonsoft.Json.Linq;
 using System.IO;
 using System.Linq;
+using System.Runtime.Serialization.Formatters.Binary;
 using System.Threading;
 using System.Threading.Tasks;
 
@@ -30,12 +31,7 @@ namespace QuaggBotCS2
             DataHandler.MWKey = jsonObject["mwKey"].ToString();
             DataHandler.OpenWeather = jsonObject["oWeather"].ToString();
             DataHandler.ConnString = jsonObject["connString"].ToString();
-
-            using (var context = new BotContext())
-            {
-                await context.Database.EnsureCreatedAsync();
-
-            }
+            LoadContext();
 
             discord = new DiscordClient(new DiscordConfiguration
             {
@@ -46,7 +42,7 @@ namespace QuaggBotCS2
             });
             discord.GuildCreated += async e =>
             {
-                using (var context = new BotContext())
+                await Task.Run(() =>
                 {
                     var server = new Server
                     {
@@ -55,7 +51,7 @@ namespace QuaggBotCS2
                         SettingsJson = "{ \"warnWords\": [], \"deleteWords\": []}"
                     };
 
-                    await context.Servers.AddAsync(server);
+                    DataHandler.Context.Servers.Add(server);
 
                     foreach (var user in e.Guild.Members)
                     {
@@ -67,25 +63,19 @@ namespace QuaggBotCS2
                             Guild = server,
                             Strikes = 0
                         };
-                        await context.Users.AddAsync(newUser);
+                        server.Users.Add(newUser);
                     }
-                    await context.SaveChangesAsync();
-                }
+                });
             };
             discord.MessageCreated += async e =>
             {
-                using (var context = new BotContext())
+                var servers = DataHandler.Context.Servers;
+                Server s = servers.Find(x => x.ServerSnow == e.Guild.Id);
+                User u = s.Users.ToList().Find(x => x.UserSnow == e.Message.Author.Id);
+                if (u.Muted == true)
                 {
-                    var servers = context.Servers
-                    .Include(b => b.Users)
-                    .ToList();
-                    Server s = servers.Find(x => x.ServerSnow == e.Guild.Id);
-                    User u = s.Users.ToList().Find(x => x.UserSnow == e.Message.Author.Id);
-                    if (u.Muted == true)
-                    {
-                        await e.Message.DeleteAsync();
-                        return;
-                    }
+                    await e.Message.DeleteAsync();
+                    return;
                 }
             };
             discord.MessageCreated += async e =>
@@ -127,14 +117,12 @@ namespace QuaggBotCS2
 
         public static async Task CheckMessageClean(DSharpPlus.EventArgs.MessageCreateEventArgs args)
         {
-            
+
             try
             {
-                
-                using var context = new BotContext();
-                var servers = context.Servers
-                    .Include(b => b.Users)
-                    .ToList();
+
+
+                var servers = DataHandler.Context.Servers;
                 Server server = new Server()
                 {
                     SettingsJson = "{ \"warnWords\": [], \"deleteWords\": []}",
@@ -200,14 +188,31 @@ namespace QuaggBotCS2
                         await args.Message.DeleteAsync($"Language: {word}");
                         await args.Guild.Owner.SendMessageAsync($"Message deleted in channel #{args.Channel.Name}");
                     }
-                }
-                await context.SaveChangesAsync();
+                } 
             }
             catch (System.Exception e)
             {
                 System.Console.WriteLine(e.InnerException);
                 throw;
             }
+        }
+
+        public static void LoadContext()
+        {
+            if (File.Exists("botContext.bin"))
+            {
+                Stream openFileStream = File.OpenRead("botContext.bin");
+                BinaryFormatter deserializer = new BinaryFormatter();
+                DataHandler.Context = (BotContext)deserializer.Deserialize(openFileStream);
+                openFileStream.Close();
+            }
+            else
+            {
+                var stream = File.Create("botContext.bin");
+                stream.Close();
+                DataHandler.Context = new BotContext();
+            }
+            DataHandler.Context.LoopNewThread();
         }
     }
 
@@ -217,6 +222,7 @@ namespace QuaggBotCS2
         public static string MWKey { get; set; }
         public static string OpenWeather { get; set; }
         public static string ConnString { get; set; }
+        public static BotContext Context { get; set; }
     }
 }
 

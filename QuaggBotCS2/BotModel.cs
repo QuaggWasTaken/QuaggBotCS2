@@ -7,32 +7,13 @@ using System.Threading.Tasks;
 
 namespace QuaggBotCS2
 {
+    [Serializable]
     public class User
     {
-        [DatabaseGenerated(DatabaseGeneratedOption.Identity)]
+
         public int UserID { get; set; }
 
-        public long __UserSnow { get; set; }
-
-        [NotMapped]
-        public ulong UserSnow
-        {
-            get
-            {
-                unchecked
-                {
-                    return (ulong)__UserSnow;
-                }
-            }
-
-            set
-            {
-                unchecked
-                {
-                    __UserSnow = (long)value;
-                }
-            }
-        }
+        public ulong UserSnow { get; set; }
 
         public string Name { get; set; }
 
@@ -47,32 +28,12 @@ namespace QuaggBotCS2
         public bool Muted { get; set; }
     }
 
+    [Serializable]
     public class Server
     {
-        [DatabaseGenerated(DatabaseGeneratedOption.Identity)]
         public int ServerID { get; set; }
 
-        public long __ServerSnow { get; set; }
-
-        [NotMapped]
-        public ulong ServerSnow
-        {
-            get
-            {
-                unchecked
-                {
-                    return (ulong)__ServerSnow;
-                }
-            }
-
-            set
-            {
-                unchecked
-                {
-                    __ServerSnow = (long)value;
-                }
-            }
-        }
+        public ulong ServerSnow { get; set; }
 
         public string ServerName { get; set; }
 

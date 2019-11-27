@@ -1,35 +1,36 @@
 ﻿using Microsoft.EntityFrameworkCore;
+using System;
+using System.Collections.Generic;
+using System.IO;
+using System.Runtime.Serialization.Formatters.Binary;
+using System.Threading;
 
 namespace QuaggBotCS2
 {
-    public class BotContext : DbContext
+    [Serializable]
+    public class BotContext
     {
-        public DbSet<User> Users { get; set; }
 
-        public DbSet<Server> Servers { get; set; }
+        public List<Server> Servers { get; set; }
 
-        protected override void OnConfiguring(DbContextOptionsBuilder optionsBuilder)
+
+        private void SaveToDisk()
         {
-            optionsBuilder.UseSqlServer(DataHandler.ConnString);
+            File.Delete("botContext.bin");
+            Stream saveFileStream = File.Create("botContext.bin");
+            BinaryFormatter serializer = new BinaryFormatter();
+            serializer.Serialize(saveFileStream, this);
+            saveFileStream.Close();
+            Thread.Sleep(TimeSpan.FromMinutes(1));
         }
 
-        protected override void OnModelCreating(ModelBuilder modelBuilder)
+        public void LoopNewThread()
         {
-            base.OnModelCreating(modelBuilder);
-
-            modelBuilder.Entity<Server>(entity =>
+            while (true)
             {
-                entity.HasKey(e => e.ServerID);
-                entity.Property(e => e.__ServerSnow).IsRequired();
-                entity.HasMany(d => d.Users).WithOne(s => s.Guild);
-            });
-
-            modelBuilder.Entity<User>(entity =>
-            {
-                entity.HasKey(e => e.UserID);
-                entity.Property(e => e.__UserSnow).IsRequired();
-                entity.HasOne(d => d.Guild).WithMany(s => s.Users);
-            });
+                Thread thread = new Thread(new ThreadStart(SaveToDisk));
+                thread.Start();
+            }
         }
     }
 }

@@ -6,6 +6,7 @@ using Microsoft.EntityFrameworkCore;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Converters;
 using Newtonsoft.Json.Linq;
+using QuaggBotCS2;
 using System;
 using System.Collections.Generic;
 using System.Globalization;
@@ -111,234 +112,234 @@ namespace QuaggBotCS2
             }
         }
 
+        [Group("Mod")]
+        [Description("Moderation commands")]
+        [Hidden]
+        public class Mod
+        {
+            [Command("Mute"), Description("Toggles mute on the user passed in"), RequirePermissions(Permissions.ManageMessages)]
+            public async Task Mute(CommandContext ctx, DiscordMember member)
+            {
+                await Task.Run(() =>
+                {
+                    var servers = DataHandler.Context.Servers;
+                    Server s = servers.Find(x => x.ServerSnow == ctx.Guild.Id);
+                    User u = s.Users.ToList().Find(x => x.UserSnow == member.Id);
+                    if (u.Muted == true)
+                    {
+                        u.Muted = false;
+                    }
+                    else
+                    {
+                        u.Muted = true;
+                    }
+                });
+            }
+
+            [Command("Kick"), Description("Kicks mentioned user for given reason"), RequirePermissions(Permissions.KickMembers)]
+            public async Task Kick(CommandContext ctx, DiscordMember member, [RemainingText] string reason = "")
+            {
+                await Task.Run(() =>
+                {
+                    var servers = DataHandler.Context.Servers;
+                    Server s = servers.Find(x => x.ServerSnow == ctx.Guild.Id);
+                    User u = s.Users.ToList().Find(x => x.UserSnow == member.Id);
+                    s.Users.Remove(u);
+                    member.RemoveAsync(reason);
+                    ctx.RespondAsync($"Kicked user {member.DisplayName}#{member.Discriminator} for reason \"{reason}\"");
+
+                });
+            }
+        }
+
         [Group("Admin")]
-        [Description("Administrative commands.")]
+        [Description("Administrative commands")]
         [Hidden]
         [RequirePermissions(Permissions.ManageGuild)]
         public class Admin
         {
-            [Command("Register"), Description("Registers your server to the database and initializes your basic settings! Please run this if I was here before the 2.0 update!")]
+            [Command("Register"), Description("Registers your server to the database and initializes your basic settings! Please run this if I was here before the 2.0 update!"), RequireOwner()]
             public async Task Register(CommandContext ctx)
             {
-                using (var context = new BotContext())
+                foreach (Server s in DataHandler.Context.Servers)
                 {
-
-                    foreach (Server s in context.Servers)
+                    if (s.ServerSnow == ctx.Guild.Id)
                     {
-                        if (s.ServerSnow == ctx.Guild.Id)
-                        {
-                            await ctx.RespondAsync("You're already registered! Thank you!");
-                            break;
-                        }
-                    }
-
-                    var server = new Server
-                    {
-                        ServerName = ctx.Guild.Name,
-                        ServerSnow = ctx.Guild.Id,
-                        SettingsJson = "{ \"warnWords\": [], \"deleteWords\": []}"
-                    };
-
-                    await context.Servers.AddAsync(server);
-
-                    foreach (var user in ctx.Guild.Members)
-                    {
-                        if (!user.IsBot)
-                        {
-                            var newUser = new User
-                            {
-                                UserSnow = user.Id,
-                                Name = user.Username,
-                                Discriminator = user.Discriminator,
-                                Guild = server,
-                                Strikes = 0
-                            };
-                            await context.Users.AddAsync(newUser);
-                        }
-                    }
-                    try
-                    {
-                        await context.SaveChangesAsync();
-                    }
-                    catch (Exception e)
-                    {
-                        Console.WriteLine(e.Message);
-                        throw;
+                        await ctx.RespondAsync("You're already registered! Thank you!");
+                        break;
                     }
                 }
+
+                var server = new Server
+                {
+                    ServerName = ctx.Guild.Name,
+                    ServerSnow = ctx.Guild.Id,
+                    SettingsJson = "{ \"warnWords\": [], \"deleteWords\": []}"
+                };
+
+                foreach (var user in ctx.Guild.Members)
+                {
+                    if (!user.IsBot)
+                    {
+                        var newUser = new User
+                        {
+                            UserSnow = user.Id,
+                            Name = user.Username,
+                            Discriminator = user.Discriminator,
+                            Guild = server,
+                            Strikes = 0
+                        };
+                        server.Users.Add(newUser);
+                    }
+                }
+                DataHandler.Context.Servers.Add(server);
                 await ctx.RespondAsync("Registering server...");
+
             }
 
             [Command("AddWarn"), Description("Add a word to your server specific settings file that will warn peopls using that word")]
             public async Task AddWarn(CommandContext ctx, string Word)
             {
-                using (var context = new BotContext())
+                Server server = new Server()
                 {
-                    Server server = new Server()
-                    {
-                        ServerSnow = 0,
-                        SettingsJson = "{ \"warnWords\": [], \"deleteWords\": []}"
-                    };
+                    ServerSnow = 0,
+                    SettingsJson = "{ \"warnWords\": [], \"deleteWords\": []}"
+                };
 
-                    foreach (Server s in context.Servers)
-                    {
-                        if (s.ServerSnow == ctx.Guild.Id)
-                            server = s;
-                        break;
-                    }
-
-                    if (server.ServerSnow == 0)
-                    {
-                        await ctx.RespondAsync("Sorry, you aren't registered in the database, please run the command '<>Admin Register' and then try this again!");
-                        return;
-                    }
-
-                    var settings = Setting.FromJson(server.SettingsJson);
-
-                    settings.WarnWords.Add(Word);
-
-                    server.SettingsJson = Serialize.ToJson(settings);
-
-                    await context.SaveChangesAsync();
-
-                    await ctx.RespondAsync($"Added word '{Word}' to your list of warning words");
+                foreach (Server s in DataHandler.Context.Servers)
+                {
+                    if (s.ServerSnow == ctx.Guild.Id)
+                        server = s;
+                    break;
                 }
+
+                if (server.ServerSnow == 0)
+                {
+                    await ctx.RespondAsync("Sorry, you aren't registered in the database, please run the command '<>Admin Register' and then try this again!");
+                    return;
+                }
+
+                var settings = Setting.FromJson(server.SettingsJson);
+
+                settings.WarnWords.Add(Word);
+
+                server.SettingsJson = Serialize.ToJson(settings);
+
+                await ctx.RespondAsync($"Added word '{Word}' to your list of warning words");
+
             }
 
             [Command("AddDelete"), Description("Add a word to your server specific settings file that will delete messages containing said word")]
             public async Task AddDelete(CommandContext ctx, string Word)
             {
-                using (var context = new BotContext())
+                Server server = new Server()
                 {
-                    Server server = new Server()
-                    {
-                        ServerSnow = 0,
-                        SettingsJson = "{ \"warnWords\": [], \"deleteWords\": []}"
-                    };
+                    ServerSnow = 0,
+                    SettingsJson = "{ \"warnWords\": [], \"deleteWords\": []}"
+                };
 
-                    foreach (Server s in context.Servers)
+                foreach (Server s in DataHandler.Context.Servers)
+                {
+                    if (s.ServerSnow == ctx.Guild.Id)
                     {
-                        if (s.ServerSnow == ctx.Guild.Id)
-                        {
-                            server = s;
-                            break;
-                        }
+                        server = s;
+                        break;
                     }
-
-                    if (server.ServerSnow == 0)
-                    {
-                        await ctx.RespondAsync("Sorry, you aren't registered in the database, please run the command '<>Admin Register' and then try this again!");
-                        return;
-                    }
-
-                    var settings = Setting.FromJson(server.SettingsJson);
-
-                    settings.DeleteWords.Add(Word);
-
-                    server.SettingsJson = Serialize.ToJson(settings);
-
-                    await context.SaveChangesAsync();
-
-                    await ctx.RespondAsync($"Added word '{Word}' to your list of deleted words");
                 }
+
+                if (server.ServerSnow == 0)
+                {
+                    await ctx.RespondAsync("Sorry, you aren't registered in the database, please run the command '<>Admin Register' and then try this again!");
+                    return;
+                }
+
+                var settings = Setting.FromJson(server.SettingsJson);
+
+                settings.DeleteWords.Add(Word);
+
+                server.SettingsJson = Serialize.ToJson(settings);
+
+                await ctx.RespondAsync($"Added word '{Word}' to your list of deleted words");
+
             }
 
             [Command("RemoveWarn"), Description("Remove warning words")]
             public async Task RemoveWarn(CommandContext ctx, string Word)
             {
-                using (var context = new BotContext())
+                Server server = new Server()
                 {
-                    Server server = new Server()
-                    {
-                        ServerSnow = 0,
-                        SettingsJson = "{ \"warnWords\": [], \"deleteWords\": []}"
-                    };
+                    ServerSnow = 0,
+                    SettingsJson = "{ \"warnWords\": [], \"deleteWords\": []}"
+                };
 
-                    foreach (Server s in context.Servers)
-                    {
-                        if (s.ServerSnow == ctx.Guild.Id)
-                            server = s;
-                        break;
-                    }
-
-                    if (server.ServerSnow == 0)
-                    {
-                        await ctx.RespondAsync("Sorry, you aren't registered in the database, please run the command '<>Admin Register' and then try this again!");
-                        return;
-                    }
-
-                    var settings = Setting.FromJson(server.SettingsJson);
-
-                    settings.WarnWords.Remove(Word);
-
-                    server.SettingsJson = Serialize.ToJson(settings);
-
-                    await context.SaveChangesAsync();
-
-                    await ctx.RespondAsync($"Removed word '{Word}' from your list of warning words");
+                foreach (Server s in DataHandler.Context.Servers)
+                {
+                    if (s.ServerSnow == ctx.Guild.Id)
+                        server = s;
+                    break;
                 }
+
+                if (server.ServerSnow == 0)
+                {
+                    await ctx.RespondAsync("Sorry, you aren't registered in the database, please run the command '<>Admin Register' and then try this again!");
+                    return;
+                }
+
+                var settings = Setting.FromJson(server.SettingsJson);
+
+                settings.WarnWords.Remove(Word);
+
+                server.SettingsJson = Serialize.ToJson(settings);
+
+                await ctx.RespondAsync($"Removed word '{Word}' from your list of warning words");
+
             }
 
             [Command("RemoveDelete"), Description("Remove deleted words")]
             public async Task RemoveDelete(CommandContext ctx, string Word)
             {
 
-                using (var context = new BotContext())
+                Server server = new Server()
                 {
-                    Server server = new Server()
-                    {
-                        ServerSnow = 0,
-                        SettingsJson = "{ \"warnWords\": [], \"deleteWords\": []}"
-                    };
+                    ServerSnow = 0,
+                    SettingsJson = "{ \"warnWords\": [], \"deleteWords\": []}"
+                };
 
-                    foreach (Server s in context.Servers)
-                    {
-                        if (s.ServerSnow == ctx.Guild.Id)
-                            server = s;
-                        break;
-                    }
-
-                    if (server.ServerSnow == 0)
-                    {
-                        await ctx.RespondAsync("Sorry, you aren't registered in the database, please run the command '<>Admin Register' and then try this again!");
-                        return;
-                    }
-
-                    var settings = Setting.FromJson(server.SettingsJson);
-
-                    settings.DeleteWords.Remove(Word);
-
-                    server.SettingsJson = Serialize.ToJson(settings);
-
-                    await context.SaveChangesAsync();
-
-                    await ctx.RespondAsync($"Removed word '{Word}' from your list of delete words");
+                foreach (Server s in DataHandler.Context.Servers)
+                {
+                    if (s.ServerSnow == ctx.Guild.Id)
+                        server = s;
+                    break;
                 }
+
+                if (server.ServerSnow == 0)
+                {
+                    await ctx.RespondAsync("Sorry, you aren't registered in the database, please run the command '<>Admin Register' and then try this again!");
+                    return;
+                }
+
+                var settings = Setting.FromJson(server.SettingsJson);
+
+                settings.DeleteWords.Remove(Word);
+
+                server.SettingsJson = Serialize.ToJson(settings);
+
+                await ctx.RespondAsync($"Removed word '{Word}' from your list of delete words");
+
             }
 
-            [Command("Mute"), Description("Toggles mute on the user passed in")]
-            public async Task Mute(CommandContext ctx, DiscordMember member)
+            [Command("Ban"), Description("Kicks mentioned user for given reason"), RequirePermissions(Permissions.BanMembers)]
+            public async Task Kick(CommandContext ctx, DiscordMember member, [RemainingText] string reason = "")
             {
                 await Task.Run(() =>
                 {
-                    using (var context = new BotContext())
-                    {
-                        var servers = context.Servers
-                            .Include(b => b.Users)
-                            .ToList();
-                        Server s = servers.Find(x => x.ServerSnow == ctx.Guild.Id);
-                        User u = s.Users.ToList().Find(x => x.UserSnow == member.Id);
-                        if (u.Muted == true)
-                        {
-                            u.Muted = false;
-                        }
-                        else
-                        {
-                            u.Muted = true;
-                        }
+                    var servers = DataHandler.Context.Servers;
+                    Server s = servers.Find(x => x.ServerSnow == ctx.Guild.Id);
+                    User u = s.Users.ToList().Find(x => x.UserSnow == member.Id);
+                    s.Users.Remove(u);
+                    member.BanAsync(0, reason);
+                    ctx.RespondAsync($"Kicked user {member.DisplayName}#{member.Discriminator} for reason \"{reason}\"");
 
-                        context.SaveChanges();
-                    }
                 });
             }
         }
